@@ -1,4 +1,5 @@
 require 'json_like'
+require 'json_like/diff'
 require 'multi_json'
 module JsonLike
   module RSpec
@@ -18,15 +19,15 @@ module JsonLike
     class SimpleMatcher < Struct.new(:expected)
       include MatchesOne
       attr :actual
-      def matches?( actual )
-        expected == (@actual = actual)
+      def diff( actual )
+        if expected == actual
+          return nil
+        else
+          Diff::Simple.new( actual, expected )
+        end
       end
-      def failure_message_for_should
-        "\nexpected: #{expected.inspect}\n     got: #{actual.inspect}\n\n(compared using ==)\n"
-      end
-
-      def failure_message_for_should_not
-        "\nexpected: value != #{expected.inspect}\n     got: #{actual.inspect}\n\n(compared using ==)\n"
+      def linearize( indent = 0, current = Diff::Context )
+        Diff::Linearizer.linearize( expected, indent, current )
       end
     end
 
@@ -37,18 +38,49 @@ module JsonLike
         super
       end
 
-      def matches?( actual )
+      def diff( actual )
         if !actual.kind_of? Hash
-          @error = "\nexpected: an object\n     got: #{actual.inspect}\n"
-          return false
+          return Diff::Simple.new( actual, self )
         end
-        keys.each do | key, matcher |
+        diff = Diff::Hash.new( actual )
+        rest = {}
+        ( keys.keys | actual.keys ).each do | key |
+          if keys.key?( key )
+            if !actual.key? key
+              diff.missing(key, keys[key])
+            else
+              d = keys[key].diff(actual[key])
+              if d
+                diff.wrong(key, d)
+              end
+            end
+          else
+            rest[key] = actual[key]
+          end
+        end
+        if matchers.none?
+          rest.each do |key, _|
+            diff.redundant( key )
+          end
+        else
 
         end
+        return nil if diff.changes.none?
+        return diff
       end
 
-      def failure_message_for_should
-
+      def linearize( indent = 0, current = Diff::Context )
+        inner = keys.sort_by{|k,_| k }.map{|k,v|
+          lines = Diff::Linearizer.linearize(v, indent + 2, current)
+          lines[0] = lines[0].class.new(k+': '+lines[0],indent + 1)
+          lines
+        }
+        inner += matchers.map{|r| Diff::Linearizer.linearize( r , indent+1, current) }
+        *items, last = inner
+        [ current.new("{", indent),
+          *items.map{|e| e.last << ',' }.flatten(1),
+          *last,
+          current.new("}", indent) ]
       end
 
     end
@@ -62,64 +94,59 @@ module JsonLike
       class MatcherEnumerator
         Submatcher = Struct.new(:multiple, :single)
         class Empty
-          def matches?( actual )
+          def diff( actual )
             (@actual = actual.size) == 0
-          end
-          def failure_message_for_should
-            "\nexpected: no more items\n     got: #{@actual} more\n"
           end
         end
         class OnlyOne < Submatcher
-          def errors( enum )
-            v = enum.next
-            a = []
-            a << [single.failure_message_for_should, v] unless single.matches?(v)
-            return a
+          def errors( diff, enum )
+            v,i  = enum.next
+            d = single.diff( v )
+            if d
+              diff.wrong( i, d )
+            end
           rescue StopIteration
-            return [["\nexpected: more items\n     got: none\n", nil]]
+            diff.missing( i, single )
           end
         end
         class OnlyMultiple < Submatcher
-          def errors( enum )
+          def errors( diff, enum )
             rest = []
-            begin
-              loop do
-                rest << enum.next
-              end
-            rescue StopIteration
+            loop do
+              rest << enum.next
             end
-            a = []
-            multiple.each do |mul|
-              a << [mul.failure_message_for_should, rest] unless mul.matches?(rest)
-            end
-            return a
+            #multiple.each do |mul|
+            #  a << [mul.failure_message_for_should, rest] unless mul.matches?(rest)
+            #end
+            #return a
           end
         end
         class Both < Submatcher
-          def errors( enum )
+          def errors( diff, enum )
             rest = []
             error_tail = []
-            matched = false
+            last_diff = nil
+            last_i = 0
             loop do
               begin
-                val = enum.next
-                break if single.matches?(val)
-                matched = true
+                val, i = enum.next
+                last_diff = single.diff( val )
+                break if last_diff.nil?
+                last_i = i
                 rest << val
               rescue StopIteration
-                if matched
-                  error_tail << [single.failure_message_for_should, val]
+                if last_diff
+                  diff.wrong( last_i, last_diff )
                 else
-                  error_tail << ["\nexpected: more items\n     got: none\n", nil]
+                  diff.missing( last_i, single.expected )
                 end
                 break
               end
             end
-            a = []
-            multiple.each do |mul|
-              a << [mul.failure_message_for_should, rest] unless mul.matches?(mul)
-            end
-            return a + error_tail
+            #a = []
+            #multiple.each do |mul|
+            #  a << [mul.failure_message_for_should, rest] unless mul.matches?(mul)
+            #end
           end
         end
         def initialize(matchers)
@@ -146,31 +173,33 @@ module JsonLike
         end
       end
 
-      def matches?( target )
+      def diff( target )
         if target.kind_of? Array
           me = MatcherEnumerator.new( values )
-          te = target.to_enum
-          errors = []
+          diff = Diff::Array.new( target )
+          te = target.to_enum(:each_with_index)
           me.each do | matcher |
-            errors << matcher.errors( te )
+            matcher.errors( diff, te )
           end
-          @errors = errors.flatten(1)
-          @errors.none?
+          return nil if diff.changes.none?
+          diff
         else
-          @errors = [["\nexpected: an array\n     got: #{target.inspect}\n"]]
-          false
+          return Diff::Simple.new( target, values )
         end
       end
 
-      def failure_message_for_should
-        @errors.map{|e| e[0] }.join
-      end
     end
 
     class Ellipsis
       include MatchesMany
       def matches?( target )
         true
+      end
+      def diff( actual )
+        return nil
+      end
+      def linearize( indent = 0, current = Diff::Context )
+        [ current.new('...',indent) ]
       end
     end
 
@@ -226,11 +255,12 @@ module JsonLike
 
       def matches?( json ) 
         parsed = MultiJson.load(json)
-        @inner.matches?( parsed )
+        @diff = @inner.diff( parsed )
+        return @diff.nil?
       end
 
       def failure_message_for_should
-        @inner.failure_message_for_should
+        Diff::SimpleFormatter.format @diff.linearize
       end
 
     end

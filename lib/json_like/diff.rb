@@ -21,7 +21,7 @@ module JsonLike; class Diff
 
     def self.linearize(what, indent = 0, current = Context )
       case what
-      when Array then
+      when ::Array then
         if what.size == 0
           return [ current.new('[]', indent) ]
         end
@@ -29,26 +29,47 @@ module JsonLike; class Diff
           linearize(e, indent + 1, current)
         }
         [ current.new("[", indent),
-          *items.map{|e| e << ',' },
-          last,
+          *items.map{|e| e.last << ',' }.flatten(1),
+          *last,
           current.new("]", indent) ]
-      when Hash then
+      when ::Hash then
         *items, last = what.map{|k,v|
           lines = linearize(v, indent + 2, current)
           lines[0] = lines[0].class.new(k+': '+lines[0],indent + 1)
           lines
         }
         [ current.new("{", indent),
-          *items.map{|e| e << ',' },
-          last,
+          *items.map{|e| e.last << ',' }.flatten(1),
+          *last,
           current.new("}", indent) ]
-      when String then
+      when ::String then
         what.inspect.split("\n").map{|str| current.new(str, indent) }
       when Numeric, TrueClass, FalseClass, NilClass then
         [ current.new(what.inspect, indent) ]
+      else
+        if what.respond_to?(:linearize)
+          what.linearize( indent, current )
+        else
+          raise ArgumentError, "Cannot linearize #{what.inspect}"
+        end
       end
     end
 
+  end
+
+  module SimpleFormatter
+    def self.prefix( lin )
+      case( lin )
+      when Missing   then '-- '
+      when Redundant then '++ '
+      else                '   '
+      end
+    end
+    def self.format( linearized )
+      linearized.map{|lin|
+        prefix(lin) + ('  '*lin.indent) + lin
+      }.join("\n")
+    end
   end
 
   class Hash < Diff
@@ -173,8 +194,8 @@ module JsonLike; class Diff
       return self
     end
 
-    def missing( i, *items )
-      @changes << Insert.new(i, items)
+    def missing( i, item, *items )
+      @changes << Insert.new(i, [item] + items)
       return self
     end
 
