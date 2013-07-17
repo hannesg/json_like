@@ -16,7 +16,7 @@ module JsonLike
 
     rule(:identifier){ match('[a-zA-Z0-9_]').repeat(1).as(:literal) | string }
 
-    rule(:object_entry){ (identifier.as(:key) >> str(':') >> space? >> value.as(:value)) | ellipsis.as(:matcher) }
+    rule(:object_entry){ (identifier.as(:key) >> space? >> str(':') >> space? >> value.as(:value)) | ellipsis.as(:matcher) }
     rule(:object){ (str('{') >> space? >> ( object_entry >> space? >> ( str(',') >> space? ).maybe ).repeat >> space? >> str('}')).as(:object) }
     rule(:array){ (str('[') >> space? >> (value.as(:entry) >> space? >> ( str(',') >> space?).maybe ).repeat >> str(']')).as(:array) }
 

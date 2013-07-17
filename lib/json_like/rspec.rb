@@ -106,7 +106,7 @@ module JsonLike
               diff.wrong( i, d )
             end
           rescue StopIteration
-            diff.missing( i, single )
+            diff.missing( i || 0, single )
           end
         end
         class OnlyMultiple < Submatcher
@@ -207,11 +207,13 @@ module JsonLike
 
       rule( object: subtree(:entries) ){
         m = UnorderedHashMatcher.new
-        entries.each do |e|
-          if e[:matcher]
-            m.matchers << e[:matcher]
-          else
-            m.keys[ e[:key] ] = e[:value]
+        if entries.kind_of? Array
+          entries.each do |e|
+            if e[:matcher]
+              m.matchers << e[:matcher]
+            else
+              m.keys[ e[:key] ] = e[:value]
+            end
           end
         end
         m
@@ -221,8 +223,12 @@ module JsonLike
         value
       }
 
-      rule( array: subtree(:entries) ){
+      rule( array: sequence(:entries) ){
         ArrayMatcher.new( entries )
+      }
+
+      rule( array: simple(:_) ){
+        ArrayMatcher.new
       }
 
       rule( literal: simple(:value) ){
@@ -237,6 +243,17 @@ module JsonLike
         value.to_s[1..-2]
       }
 
+      rule( null: simple(:value) ){
+        nil
+      }
+
+      rule( false: simple(:value) ){
+        false
+      }
+
+      rule( true: simple(:value) ){
+        true
+      }
       rule( ellipsis: simple(:value) ){
         Ellipsis.new
       }

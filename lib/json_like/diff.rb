@@ -44,7 +44,9 @@ module JsonLike; class Diff
           current.new("}", indent) ]
       when ::String then
         what.inspect.split("\n").map{|str| current.new(str, indent) }
-      when Numeric, TrueClass, FalseClass, NilClass then
+      when NilClass then
+        [ current.new("null", indent) ]
+      when Numeric, TrueClass, FalseClass then
         [ current.new(what.inspect, indent) ]
       else
         if what.respond_to?(:linearize)
@@ -190,16 +192,19 @@ module JsonLike; class Diff
     end
 
     def redundant( i )
+      raise ArgumentError unless i.kind_of? Numeric
       @changes << Delete.new(i, @to[i])
       return self
     end
 
     def missing( i, item, *items )
+      raise ArgumentError unless i.kind_of? Numeric
       @changes << Insert.new(i, [item] + items)
       return self
     end
 
     def wrong( i, diff )
+      raise ArgumentError unless i.kind_of? Numeric
       @changes << Change.new( i , diff )
       return self
     end

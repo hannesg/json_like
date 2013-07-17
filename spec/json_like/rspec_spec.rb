@@ -1,6 +1,33 @@
 require 'json_like/rspec'
 describe JsonLike::RSpec do
 
+  context "given an empty array to match" do
+    subject do
+      JsonLike::RSpec.matcher(<<JSONLIKE.chomp)
+[]
+JSONLIKE
+    end
+
+    it "matches an empty array" do
+      expect( subject.matches?('[]') ).to be_true
+    end
+
+  end
+
+  context "given an empty hash to match" do
+    subject do
+      JsonLike::RSpec.matcher(<<JSONLIKE.chomp)
+{}
+JSONLIKE
+    end
+
+    it "matches an empty hash" do
+      expect( subject.matches?('{}') ).to be_true
+    end
+
+  end
+
+
   context "given an array to match" do
     subject do
       JsonLike::RSpec.matcher(<<JSONLIKE.chomp)
