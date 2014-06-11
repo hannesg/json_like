@@ -109,6 +109,54 @@ STR
 -- }
 STR
     end
+
   end
 
+  context "given a hash in an array in a hash to match" do
+
+    subject do
+      JsonLike::RSpec.matcher(<<JSONLIKE)
+{
+  foo: "bar",
+  bar: [ {"baz": "fuz"} ]
+  ...
+}
+JSONLIKE
+    end
+
+    it "matches a fitting hash" do
+      expect( subject.matches?('{"foo":"bar","bar":[{"baz":"fuz"}]}') ).to be_true
+    end
+
+    it "does not match a wrong inner hash" do
+      expect( subject.matches?('{"foo":"bar","bar":[{"baz":"zuf"}]}') ).to be_false
+      expect( subject.failure_message_for_should ).to eql <<STR.chomp
+   {
+     bar: [
+         {
+++         baz: "zuf"
+--           "fuz"
+         }
+       ],
+     foo: "bar"
+   }
+STR
+    end
+
+    it "does not match null" do
+      expect( subject.matches?('null') ).to be_false
+      expect( subject.failure_message_for_should ).to eql <<STR.chomp
+++ null
+-- {
+--   bar: [
+--       {
+--         baz: "fuz"
+--       }
+--     ],
+--   foo: "bar",
+--   ...
+-- }
+STR
+    end
+  end
 end

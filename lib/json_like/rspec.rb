@@ -78,7 +78,7 @@ module JsonLike
         inner += matchers.map{|r| Diff::Linearizer.linearize( r , indent+1, current) }
         *items, last = inner
         [ current.new("{", indent),
-          *items.map{|e| e.last << ',' }.flatten(1),
+          *items.map{|e| e.last << ',' ; e }.flatten(1),
           *last,
           current.new("}", indent) ]
       end
@@ -171,6 +171,10 @@ module JsonLike
           end
           return self
         end
+      end
+
+      def linearize( indent = 0, current = Diff::Context )
+        return Diff::Linearizer.linearize( values , indent, current)
       end
 
       def diff( target )

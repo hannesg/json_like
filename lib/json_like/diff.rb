@@ -29,7 +29,7 @@ module JsonLike; class Diff
           linearize(e, indent + 1, current)
         }
         [ current.new("[", indent),
-          *items.map{|e| e.last << ',' }.flatten(1),
+          *items.map{|e| e.last << ',' ; e }.flatten(1),
           *last,
           current.new("]", indent) ]
       when ::Hash then
@@ -39,7 +39,7 @@ module JsonLike; class Diff
           lines
         }
         [ current.new("{", indent),
-          *items.map{|e| e.last << ',' }.flatten(1),
+          *items.map{|e| e.last << ','; e }.flatten(1),
           *last,
           current.new("}", indent) ]
       when ::String then
